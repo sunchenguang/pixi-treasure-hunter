@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>pixi-demo-23</title>
+    <script src="https://www.eveningwater.com/static/data/web/PixiJS/source/dist/pixi.min.js"></script>
+</head>
+
+<body>
+<script>
+  let Application = PIXI.Application,
+    Container = PIXI.Container,
+    loader = PIXI.loader,
+    resources = PIXI.loader.resources,
+    TextureCache = PIXI.utils.TextureCache,
+    Graphics = PIXI.Graphics,
+    Text = PIXI.Text,
+    TextStyle = PIXI.TextStyle,
+    Sprite = PIXI.Sprite;
+  //创建一个应用对象
+  let app = new Application({
+    width: 512,
+    height: 512,
+    antialias: true,
+    transparent: false,
+    resolution: 1
+  });
+  document.body.appendChild(app.view);
+  //加载所有资源
+  loader.add("./data/texture.json").load(setup);
+  let state;//游戏状态
+  let explorer;//探险者
+  let treasure;//宝箱
+  let blob;//泡泡怪
+  let blobs;//存储泡泡怪的数组
+  let dungeon;//地牢
+  let door;//门
+  let healthBar;//血量
+  let message;//文本提示
+  let gameScene;//游戏场景
+  let gameOverScene;//游戏结束场景
+  let textureId;//资源别名
+  /**
+   * 游戏初始化
+   */
+  function setup(){
+
+    //初始化游戏场景
+    gameScene = new Container();
+    app.stage.addChild(gameScene);
+
+    //资源别名
+    textureId = resources["./data/texture.json"].textures;
+    //地牢
+    dungeon = new Sprite(textureId["dungeon.png"]);
+    gameScene.addChild(dungeon);
+
+    //门
+    door = new Sprite(textureId["door.png"]);
+    //设置门的位置
+    door.position.set(32,0);
+    gameScene.addChild(door);
+
+    //探险者以及探险者的位置
+    explorer = new Sprite(textureId["explorer.png"]);
+    explorer.x = 60;
+    explorer.y = gameScene.height / 2 - explorer.height / 2;
+    //探险者的速度初始化
+    explorer.vx = 0;
+    explorer.vy = 0;
+    gameScene.addChild(explorer);
+
+    //宝箱以及宝箱的位置
+    treasure = new Sprite(textureId["treasure.png"]);
+    treasure.position.set(gameScene.width - treasure.width - 40,gameScene.height / 2 - treasure.height / 2);
+    gameScene.addChild(treasure);
+
+    //泡泡怪
+    let numberOfBlobs = 6;
+    let spacing = 48;
+    let xOffset = 150;
+    let speed = 2;
+    let direction = 1;
+
+    blobs = [];
+
+    for(let i = 0;i < numberOfBlobs;i++){
+      //初始化泡泡怪
+      blob = new Sprite(textureId["blob.png"]);
+      //每个精灵水平隔开的位置
+      let x = spacing * i + xOffset;
+      //垂直上的位置
+      let y = randomInit(0,gameScene.height - blob.height);
+      blob.position.set(x,y);
+
+      //垂直速度跟方向有关
+      blob.vy = speed * direction;
+      //下一个泡泡怪反向
+      direction *= -1;
+      blobs.push(blob);
+      gameScene.addChild(blob);
+    }
+
+    //血量
+    healthBar = new Container();
+    //位置在右上角
+    healthBar.position.set(app.stage.width - 170,2);
+    gameScene.addChild(healthBar);
+
+    //黑色矩形
+    let innerBar = new Graphics();
+    innerBar.beginFill(0X000000);
+    innerBar.drawRect(0,0,130,6);
+    innerBar.endFill();
+    healthBar.addChild(innerBar);
+    //红色矩形
+    let outerBar = new Graphics();
+    outerBar.beginFill(0XFF3300);
+    outerBar.drawRect(0,0,130,6);
+    outerBar.endFill();
+    healthBar.addChild(outerBar);
+
+    //因为要控制血量,所以这里将存储红色矩形
+    healthBar.outer = outerBar;
+
+    //绘制游戏结束场景
+    gameOverScene = new Container();
+    app.stage.addChild(gameOverScene);
+
+    //游戏结束场景默认是不显示的
+    gameOverScene.visible = false;
+
+    //游戏结束场景显示时,显示的文本
+    let style = new TextStyle({
+      fontFamily:"Futura",
+      fontSize:70,
+      fill:"white"
+    });
+    message = new Text("the End!",style);
+    //文本提示的位置
+    message.position.set(110,app.stage.height / 2 - 40);
+    gameOverScene.addChild(message);
+
+
+    // 键盘控制探险者移动
+    let left = keyBoard(37);
+    let up = keyBoard(38);
+    let right = keyBoard(39);
+    let down = keyBoard(40);
+
+    // 设置左键的按，放事件
+    left.press = () => {
+      explorer.vx = -5;
+      explorer.vy = 0;
+    }
+    left.release = () => {
+      // 没有按右键，上键，下键
+      if(!right.isDown && explorer.vy === 0){
+        explorer.vx = 0;
+      }
+    }
+    // 设置上键的按，放事件
+    up.press = () => {
+      explorer.vy = -5;
+      explorer.vx = 0;
+    }
+    up.release = () => {
+      if(!down.isDown && explorer.vx === 0){
+        explorer.vy = 0;
+      }
+    }
+    // 设置右键的按，放事件
+    right.press = () => {
+      explorer.vx = 5;
+      explorer.vy = 0;
+    }
+
+    right.release = () => {
+      if(!left.isDown && explorer.vy === 0){
+        explorer.vx = 0;
+      }
+    }
+
+    // 设置下键的按，放事件
+    down.press = () => {
+      explorer.vx = 0;
+      explorer.vy = 5;
+    }
+
+    down.release = () => {
+      if(!up.isDown && explorer.vx === 0){
+        explorer.vy = 0;
+      }
+    }
+    //游戏状态
+    state = play;
+    //游戏循环
+    app.ticker.add((delta) => { gameLoop(delta);})
+  }
+  /**
+   * 游戏循环执行的函数
+   */
+  function gameLoop(delta){
+    state(delta);
+  }
+  /**
+   * 游戏正常运行时执行的函数
+   */
+  function play(delta){
+    //使用探险者的速度是探险者运动
+    explorer.x += explorer.vx;
+    explorer.y += explorer.vy;
+    //处理探险者运动的边界,只能在地牢内部移动
+    contain(explorer,{x:28,y:10,width:488,height:400});
+
+    //探险者与泡泡怪初始碰撞
+    let explorerHit = false;
+
+    blobs.forEach(function(blob){
+      //移动泡泡怪
+      blob.y += blob.vy;
+      //如果泡泡怪撞到了墙,则反向
+      let blobHitWall = contain(blob,{x:28,y:10,width:488,height:480});
+      if(blobHitWall === 'top' || blobHitWall === 'bottom'){
+        //改变垂直速度使得泡泡怪反向运动
+        blob.vy *= -1;
+      }
+
+      if(hitRectangle(explorer,blob)){
+        //探险者与泡泡怪碰撞
+        explorerHit = true;
+      }
+    });
+
+    if(explorerHit){
+      //探险者变成半透明
+      explorer.alpha = 0.5;
+      //血量减少
+      healthBar.outer.width -= 10;
+    }else{
+      //探险者完全透明
+      explorer.alpha = 1;
+    }
+    //如果探险者与宝箱碰撞,则让宝箱位置偏移,使得看起来就像探险者携带宝箱一样
+    if(hitRectangle(explorer,treasure)){
+      treasure.position.set(explorer.x + 8,explorer.y + 8);
+    }
+    //如果血量小于0则游戏结束
+    if(healthBar.outer.width < 0){
+      state = end;
+      message.text = "You lost!"
+    }
+    //如果宝箱与出口碰撞,则游戏结束并且成功赢得游戏
+    if(hitRectangle(treasure,door)){
+      state = end;
+      message.text = "You won!";
+    }
+  }
+  /*
+  * 游戏结束时执行的函数
+  */
+  function end(){
+    gameScene.visible = false;
+    gameOverScene.visible = true;
+  }
+  /*
+  * 精灵的运动范围边界判断
+  * sprite是否处于container的范围内。如果碰到边界，返回碰到哪条边界
+  */
+  function contain(sprite,container){
+    let collision;
+    //左侧
+    if(sprite.x < container.x){
+      sprite.x = container.x;
+      collision = "left";
+    }
+    //上方
+    if(sprite.y < container.y){
+      sprite.y = container.y;
+      collision = "top";
+    }
+    //右侧
+    if(sprite.width + sprite.x > container.width){
+      sprite.x = container.width - sprite.width;
+      collision = "right";
+    }
+    //下方
+    if(sprite.height + sprite.y > container.height){
+      sprite.y = container.height - sprite.height;
+      collision = "bottom";
+    }
+    return collision;
+  }
+  /*
+  * 键盘绑定事件
+  * 处理指定按键（上下左右）的行为
+  */
+  function keyBoard(value) {
+    let key = {};
+    key.value = value; //value应是keyCode
+    key.isDown = false;
+    key.isUp = true;
+    key.press = null;
+    key.release = null;
+
+    key.downHandler = function (event) {
+      if(event.keyCode === key.value){
+        if(key.isUp && key.press) key.press();
+        key.isDown = true;
+        key.isUp = false;
+        event.preventDefault();
+      }
+    }
+
+    key.upHandler = function(event){
+      if(event.keyCode === key.value){
+        if(key.isDown && key.release)key.release();
+        key.isUp = true;
+        key.isDown = false;
+        event.preventDefault();
+      }
+    }
+
+    const downListener = key.downHandler.bind(key);
+    const upListener = key.upHandler.bind(key);
+
+    window.addEventListener('keydown',downListener,false);
+    window.addEventListener('keyup',upListener,false);
+
+    key.unsubscribe = function(){
+      window.removeEventListener('keydown',downListener);
+      window.removeEventListener('keyup',upListener);
+    }
+    return key;
+  }
+  /*碰撞检测函数*/
+  function hitRectangle(r1,r2){
+    let hit;
+    let combinedHalfWidth;
+    let combinedHalfHeight;
+    let vx;
+    let vy;
+
+    hit = false;
+
+    //精灵1中心点x
+    r1.centerX = r1.x + r1.width / 2;
+    //精灵1中心点y
+    r1.centerY = r1.y + r1.height / 2;
+    //精灵2中心点x
+    r2.centerX = r2.x + r2.width / 2;
+    //精灵2中心点y
+    r2.centerY = r2.y + r2.height / 2;
+
+    //精灵1宽度的一半
+    r1.halfWidth = r1.width / 2;
+    //精灵1高度的一半
+    r1.halfHeight = r1.height / 2;
+    //精灵2宽度的一半
+    r2.halfWidth = r2.width / 2;
+    //精灵2高度的一半
+    r2.halfHeight = r2.height / 2;
+
+    //速度
+    vx = r1.centerX - r2.centerX;
+    vy = r1.centerY - r2.centerY;
+
+    //碰撞宽高
+    combinedHalfWidth = r1.halfWidth + r2.halfWidth;
+    combinedHalfHeight = r1.halfHeight + r2.halfHeight;
+
+    //如果x坐标发生碰撞
+    if(Math.abs(vx) < combinedHalfWidth){
+      //如果y坐标发生碰撞
+      if(Math.abs(vy) < combinedHalfHeight){
+        hit = true;
+      }else{
+        hit = false;
+      }
+    }else{
+      hit = false;
+    }
+    return hit;
+  }
+  /*
+  * 随机函数
+  */
+  function randomInit(min,max){
+    return Math.floor(Math.random() * (max - min + 1)) + min;
+  }
+</script>
+</body>
+
+</html>
